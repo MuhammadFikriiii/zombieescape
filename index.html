@@ -13,7 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <script>
-      // Firebase Config
+      // Firebase Config - It is recommended to replace this with your own Firebase project configuration
       const firebaseConfig = {
         apiKey: "AIzaSyBHK0gVjtp1pHUpPszjYzJRABlydaceOGw",
         authDomain: "zombie-escape-efa47.firebaseapp.com",
@@ -24,7 +24,7 @@
         appId: "1:410336547455:web:1de993a31e97fe5a20654a"
       };
 
-      // Inisialisasi Firebase
+      // Initialize Firebase
       firebase.initializeApp(firebaseConfig);
       const db = firebase.database();
     </script>
@@ -47,6 +47,8 @@
         .hidden { display: none !important; }
         #room-code-display { font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5em; }
         #spectator-info { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); background-color: rgba(239, 68, 68, 0.8); padding: 5px 15px; border-radius: 10px; font-weight: bold; z-index: 30; }
+        .results-list ol { list-style-type: decimal; padding-left: 1rem; }
+        .results-list li { margin-bottom: 0.5rem; }
     </style>
 </head>
 <body class="bg-black text-white select-none">
@@ -95,16 +97,34 @@
              <div id="waiting-for-host-text" class="text-yellow-400">Menunggu host memulai permainan...</div>
         </div>
 
+        <!-- Spectator Choice Menu -->
+        <div id="spectator-choice-menu" class="menu-screen hidden">
+            <h2 class="font-creepster text-8xl text-red-600 mb-4">YOU DIED</h2>
+            <p class="text-xl text-gray-300 mb-8">Kamu telah tertangkap! Tunggu permainan selesai.</p>
+            <div class="flex flex-col md:flex-row gap-4">
+                <button id="spectate-btn" class="game-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Tonton Teman</button>
+                <button id="exit-room-btn" class="game-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Keluar dari Room</button>
+            </div>
+        </div>
+
+        <!-- Finished Waiting Screen -->
+        <div id="finished-wait-screen" class="menu-screen hidden">
+            <h2 class="font-creepster text-8xl text-green-500 mb-4">ESCAPED!</h2>
+            <p class="text-xl text-gray-300 mb-8">Kamu berhasil keluar! Menunggu pemain lain...</p>
+            <div id="mini-leaderboard" class="text-lg"></div>
+        </div>
+
+
         <!-- Game Container -->
         <div id="game-container" class="w-screen h-screen hidden">
             <canvas id="game-canvas"></canvas>
             <div id="game-ui" class="absolute top-0 left-0 p-4 text-white font-bold flex justify-between items-start w-full z-20">
-                 <div class="flex flex-col items-start md:flex-row md:items-center pointer-events-none">
+                <div class="flex flex-col items-start md:flex-row md:items-center pointer-events-none">
                     <div class="bg-black bg-opacity-40 p-2 px-4 rounded-lg"><p>Waktu: <span id="timer">0.0</span>s</p></div>
                     <div class="bg-black bg-opacity-40 p-2 px-4 rounded-lg mt-2 md:mt-0 md:ml-4"><p>Terbaik (Offline): <span id="high-score-display">N/A</span></p></div>
-                 </div>
-                 <button id="exit-spectator-btn" class="game-button hidden bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg text-sm pointer-events-auto">Keluar</button>
-                 <div id="minimap-container" class="p-1 rounded-lg pointer-events-auto"><canvas id="minimap-canvas" width="150" height="150"></canvas></div>
+                </div>
+                <button id="exit-spectator-btn" class="game-button hidden bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg text-sm pointer-events-auto">Keluar</button>
+                <div id="minimap-container" class="p-1 rounded-lg pointer-events-auto"><canvas id="minimap-canvas" width="150" height="150"></canvas></div>
             </div>
             <div id="spectator-info" class="hidden"></div>
             <div id="mobile-controls" class="absolute bottom-5 right-5 z-20 grid grid-cols-3 gap-2 w-48 h-48 pointer-events-auto sm:hidden"></div>
@@ -113,12 +133,12 @@
         <!-- End Screen -->
         <div id="end-screen-template" class="menu-screen hidden">
              <h2 id="end-title" class="font-creepster text-8xl mb-4"></h2>
-            <p id="end-subtitle" class="text-xl text-gray-300"></p>
-            <div class="mt-6 text-2xl">
-                <p>Waktu Permainan: <span id="end-score" class="text-yellow-400 font-bold"></span>s</p>
-                <p>Terbaik (Offline): <span id="end-high-score" class="text-yellow-400 font-bold"></span></p>
-            </div>
-            <button id="restart-button" class="game-button mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Kembali ke Menu</button>
+             <p id="end-subtitle" class="text-xl text-gray-300"></p>
+             <div class="mt-6 text-xl bg-black/30 p-4 rounded-lg w-full max-w-md results-list">
+                <p class="font-bold text-2xl mb-2">Peringkat Akhir:</p>
+                <div id="end-results"></div>
+             </div>
+             <button id="restart-button" class="game-button mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Kembali ke Menu</button>
         </div>
     </div>
 
@@ -129,6 +149,8 @@
         const mainMenu = document.getElementById('main-menu');
         const onlineMenu = document.getElementById('online-menu');
         const waitingRoom = document.getElementById('waiting-room');
+        const spectatorChoiceMenu = document.getElementById('spectator-choice-menu');
+        const finishedWaitScreen = document.getElementById('finished-wait-screen');
         const gameContainer = document.getElementById('game-container');
         const endScreen = document.getElementById('end-screen-template');
         
@@ -140,6 +162,8 @@
         const backToMainMenuBtn = document.getElementById('back-to-main-menu-btn');
         const startOnlineGameBtn = document.getElementById('start-online-game-btn');
         const restartButton = document.getElementById('restart-button');
+        const spectateBtn = document.getElementById('spectate-btn');
+        const exitRoomBtn = document.getElementById('exit-room-btn');
         const exitSpectatorBtn = document.getElementById('exit-spectator-btn');
         
         const avatarSelectionContainer = document.getElementById('avatar-selection');
@@ -154,6 +178,8 @@
         const timerEl = document.getElementById('timer');
         const highScoreEl = document.getElementById('high-score-display');
         const spectatorInfo = document.getElementById('spectator-info');
+        const endResultsContainer = document.getElementById('end-results');
+        const miniLeaderboard = document.getElementById('mini-leaderboard');
 
         // === Game Constants & State ===
         const TILE_SIZE = 50, MAZE_WIDTH = 51, MAZE_HEIGHT = 51, PLAYER_SPEED = 2.8;
@@ -163,7 +189,7 @@
         const AVATAR_OPTIONS = ['👨','👩','🧑','👧','👦','🧒','👶','👵','👴','🧔','🕵️‍♂️','👩‍⚕️','👩‍🎓','👩‍🍳','👩‍🚀','👨‍💻','🦹‍♂️','🤹‍♀️','🤦‍♂️','🙇‍♂️'];
         let maze = [], player = {}, zombies = [], exit = {}, keys = { w: false, a: false, s: false, d: false };
         let animationFrameId, startTime, highScore = localStorage.getItem('zombieEscapeHighScore') || null, gameOver = false;
-        let selectedAvatar = '🧑';
+        let selectedAvatar = '�';
         let isOnline = false, isHost = false, roomCode = null, playerId = null, roomRef = null, onlinePlayers = {};
         let spectatingPlayerId = null; 
         
@@ -203,8 +229,9 @@
                 myPlayer.emoji = selectedAvatar;
                 myPlayer.name = playerNameInput.value.trim() || `Host`;
                 myPlayer.isDead = false;
+                myPlayer.hasFinished = false;
 
-                const roomData = { maze, exit, zombies: initialZombies, gameState: 'waiting', createdAt: firebase.database.ServerValue.TIMESTAMP, player1: myPlayer };
+                const roomData = { maze, exit, zombies: initialZombies, gameState: 'waiting', createdAt: firebase.database.ServerValue.TIMESTAMP, player1: myPlayer, finishers: {} };
                 await roomRef.set(roomData);
                 playerId = 'player1';
                 roomRef.child(playerId).onDisconnect().remove();
@@ -240,6 +267,7 @@
                 myPlayer.emoji = selectedAvatar;
                 myPlayer.name = playerNameInput.value.trim() || `Player ${playerId.slice(-1)}`;
                 myPlayer.isDead = false;
+                myPlayer.hasFinished = false;
 
                 await roomRef.child(playerId).set(myPlayer);
                 roomRef.child(playerId).onDisconnect().remove();
@@ -256,44 +284,63 @@
         function listenToRoom() {
             roomCodeDisplay.textContent = roomCode;
             roomRef.on('value', (snapshot) => {
-                if(gameOver) return;
+                if(gameOver && isOnline) return;
                 const roomData = snapshot.val();
-                if (!roomData) { alert("Host telah keluar."); leaveRoom(); return; }
+                if (!roomData) { if(isOnline) { alert("Host telah keluar atau room ditutup."); leaveRoom(); } return; }
                 
                 onlinePlayers = {};
                 ['player1', 'player2', 'player3', 'player4'].forEach(key => { if (roomData[key]) onlinePlayers[key] = roomData[key]; });
+
+                // Sync local player state
+                if(onlinePlayers[playerId]) {
+                    const myOnlineData = onlinePlayers[playerId];
+                    if (player.isDead !== myOnlineData.isDead) { player.isDead = myOnlineData.isDead; if (player.isDead) playerDied(); }
+                    if (player.hasFinished !== myOnlineData.hasFinished) { player.hasFinished = myOnlineData.hasFinished; if (player.hasFinished) playerFinished(roomData.finishers || {}); }
+                }
 
                 playerList.innerHTML = '';
                 let livingPlayers = [];
                 for (const id in onlinePlayers) {
                     const p = onlinePlayers[id];
                     if (p) {
-                         const li = document.createElement('li');
-                         li.textContent = `${p.isDead ? '💀' : p.emoji} ${p.name}`;
-                         playerList.appendChild(li);
-                         if (!p.isDead) livingPlayers.push({id, ...p});
+                        const li = document.createElement('li');
+                        let statusEmoji = p.emoji;
+                        if(p.hasFinished) statusEmoji = '🏁';
+                        if(p.isDead) statusEmoji = '💀';
+                        li.textContent = `${statusEmoji} ${p.name}`;
+                        playerList.appendChild(li);
+                        if (!p.isDead && !p.hasFinished) livingPlayers.push({id, ...p});
                     }
                 }
 
-                if (onlinePlayers[playerId] && onlinePlayers[playerId].isDead && !player.isDead) {
-                    playerDied();
-                }
-
-                if (player.isDead) {
-                    if (!spectatingPlayerId || !onlinePlayers[spectatingPlayerId] || onlinePlayers[spectatingPlayerId].isDead) {
-                        const nextSpectatee = livingPlayers.find(p => p.id !== playerId);
-                        spectatingPlayerId = nextSpectatee ? nextSpectatee.id : null;
-                    }
-                    if(spectatingPlayerId && onlinePlayers[spectatingPlayerId]) {
-                        spectatorInfo.textContent = `Menonton: ${onlinePlayers[spectatingPlayerId].name}`;
-                        spectatorInfo.classList.remove('hidden');
-                    } else {
-                        spectatorInfo.classList.add('hidden');
-                    }
+                // Spectator logic for dead or finished players
+                const shouldSpectate = player.isDead || player.hasFinished;
+                if (shouldSpectate && roomData.gameState === 'playing') {
+                     if (!spectatingPlayerId || !onlinePlayers[spectatingPlayerId] || onlinePlayers[spectatingPlayerId].isDead || onlinePlayers[spectatingPlayerId].hasFinished) {
+                         const nextSpectatee = livingPlayers.find(p => p.id !== playerId);
+                         spectatingPlayerId = nextSpectatee ? nextSpectatee.id : null;
+                     }
+                     if(spectatingPlayerId && onlinePlayers[spectatingPlayerId]) {
+                         spectatorInfo.textContent = `Menonton: ${onlinePlayers[spectatingPlayerId].name}`;
+                         spectatorInfo.classList.remove('hidden');
+                         exitSpectatorBtn.classList.remove('hidden');
+                     } else {
+                         spectatorInfo.textContent = `Tidak ada pemain untuk ditonton.`;
+                         spectatorInfo.classList.remove('hidden');
+                         exitSpectatorBtn.classList.add('hidden');
+                     }
+                } else if (!shouldSpectate) {
+                    spectatorInfo.classList.add('hidden');
                 }
                 
-                if(isHost && roomData.gameState === 'playing' && livingPlayers.length === 0 && Object.keys(onlinePlayers).length > 0) {
-                    triggerEndScreen(false, "Semua pemain");
+                // End game condition check by host
+                if(isHost && roomData.gameState === 'playing') {
+                    const totalPlayers = Object.keys(onlinePlayers).length;
+                    const deadCount = Object.values(onlinePlayers).filter(p => p.isDead).length;
+                    const finishedCount = roomData.finishers ? Object.keys(roomData.finishers).length : 0;
+                    if (deadCount + finishedCount >= totalPlayers && totalPlayers > 0) {
+                        triggerEndScreen(roomData.finishers || {});
+                    }
                 }
                 
                 if (isHost && playerId === 'player1') {
@@ -305,35 +352,39 @@
                 }
 
                 if (roomData.gameState === 'playing' && gameContainer.classList.contains('hidden')) {
-                    maze = roomData.maze; exit = roomData.exit;
+                    maze = roomData.maze; exit = roomData.exit; startTime = roomData.startTime;
                     zombies = roomData.zombies.map(z => ({...z, directionAngle: z.dx, timeToChangeDirection: z.ttcd, isChasing: z.chasing}));
-                    if(onlinePlayers[playerId]) { player = {...onlinePlayers[playerId]}; initGame(true); }
+                    if(onlinePlayers[playerId]) player = {...onlinePlayers[playerId]};
+                    initGame(true);
                 }
                 if (!isHost && roomData.zombies) {
                    zombies = roomData.zombies.map(z => ({...z, directionAngle: z.dx, timeToChangeDirection: z.ttcd, isChasing: z.chasing}));
                 }
-                if (roomData.gameState === 'finished') triggerEndScreen(roomData.win, roomData.winnerName);
+                if (roomData.gameState === 'finished') triggerEndScreen(roomData.finishers || {});
             });
         }
         
         function leaveRoom() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
             if (roomRef) {
-                if (playerId) roomRef.child(playerId).remove();
+                if (playerId) roomRef.child(playerId).onDisconnect().cancel();
+                if(isHost && roomCode) { roomRef.remove(); }
+                 else if (playerId) { roomRef.child(playerId).remove(); }
                 roomRef.off();
             }
-            if (isHost && roomCode) db.ref(`rooms/${roomCode}`).remove();
-            isOnline = false; isHost = false; roomCode = null; playerId = null; roomRef = null; gameOver = false;
+            isOnline = false; isHost = false; roomCode = null; playerId = null; roomRef = null; gameOver = true;
+            player = {}; onlinePlayers = {}; spectatingPlayerId = null;
             showMenu(mainMenu);
         }
 
         function updatePlayerPositionOnline() {
-            if(isOnline && playerId && roomRef && !player.isDead) roomRef.child(playerId).update({ x: player.x, y: player.y });
+            if(isOnline && playerId && roomRef && !player.isDead && !player.hasFinished) roomRef.child(playerId).update({ x: player.x, y: player.y });
         }
 
         // --- Core Game Logic ---
         function update() {
             if (gameOver) return;
-            if(!player.isDead) {
+            if(!player.isDead && !player.hasFinished) {
                 const pSize = TILE_SIZE * 0.3; let moveX = 0, moveY = 0;
                 if (keys.a) moveX -= PLAYER_SPEED; if (keys.d) moveX += PLAYER_SPEED;
                 if (keys.w) moveY -= PLAYER_SPEED; if (keys.s) moveY += PLAYER_SPEED;
@@ -342,39 +393,42 @@
                 if(isOnline) updatePlayerPositionOnline();
             }
 
-            if (!isOnline || isHost) {
-                const playersForZombies = Object.values(onlinePlayers).filter(p => p && !p.isDead);
+            if (isHost) {
+                const livingPlayers = Object.entries(onlinePlayers).filter(([id, p]) => p && !p.isDead && !p.hasFinished).map(([id, p]) => ({ id, ...p }));
+                
                 zombies.forEach(zombie => {
                     let closestPlayer = null, minDistance = ZOMBIE_DETECTION_RADIUS;
-                    playersForZombies.forEach(p => { const d = Math.hypot(p.x - zombie.x, p.y - zombie.y); if(d < minDistance) { minDistance = d; closestPlayer = p; } });
+                    livingPlayers.forEach(p => { const d = Math.hypot(p.x - zombie.x, p.y - zombie.y); if(d < minDistance) { minDistance = d; closestPlayer = p; } });
                     if (closestPlayer && hasLineOfSight(zombie, closestPlayer)) { zombie.isChasing = true; zombie.target = closestPlayer; } else { zombie.isChasing = false; zombie.target = null; }
                     let speed = zombie.isChasing ? ZOMBIE_CHASE_SPEED : ZOMBIE_WANDER_SPEED, angle = zombie.directionAngle;
                     if(zombie.isChasing) { angle = Math.atan2(zombie.target.y - zombie.y, zombie.target.x - zombie.x); } else { zombie.timeToChangeDirection--; if (zombie.timeToChangeDirection <= 0) { zombie.directionAngle = Math.random() * 2 * Math.PI; angle = zombie.directionAngle; zombie.timeToChangeDirection = Math.floor(Math.random() * 120) + 90; } }
                     const zPrevX = zombie.x, zPrevY = zombie.y; zombie.x += Math.cos(angle) * speed; zombie.y += Math.sin(angle) * speed;
                     if (isWallByPixels(zombie.x, zombie.y, TILE_SIZE*0.2)) { zombie.x = zPrevX; zombie.y = zPrevY; zombie.timeToChangeDirection = 0; }
                 });
-                 if (isOnline && isHost) roomRef.child('zombies').set(zombies.map(z => ({x: z.x, y: z.y, emoji: z.emoji, dx: z.directionAngle, ttcd: z.timeToChangeDirection, chasing: z.isChasing})));
-            }
-            
-            // Host checks win/loss for all players
-            if(isOnline && isHost) {
-                 const livingPlayers = Object.entries(onlinePlayers).filter(([id, p]) => p && !p.isDead);
-                 for(const [id, p] of livingPlayers) {
-                     zombies.forEach(zombie => {
-                         if(Math.hypot(p.x - zombie.x, p.y - zombie.y) < TILE_SIZE * 0.6) {
-                            roomRef.child(`${id}/isDead`).set(true);
-                         }
-                     });
+                roomRef.child('zombies').set(zombies.map(z => ({x: z.x, y: z.y, emoji: z.emoji, dx: z.directionAngle, ttcd: z.timeToChangeDirection, chasing: z.isChasing})));
+
+                livingPlayers.forEach(p => {
+                     zombies.forEach(zombie => { if(Math.hypot(p.x - zombie.x, p.y - zombie.y) < TILE_SIZE * 0.6) roomRef.child(`${p.id}/isDead`).set(true); });
+                     
                      if (exit && exit.x && Math.hypot(p.x - exit.x, p.y - exit.y) < TILE_SIZE * 0.7) {
-                         triggerEndScreen(true, p.name);
-                         return; // End update loop if someone wins
+                         roomRef.child('finishers').once('value', snapshot => {
+                             const finishers = snapshot.val() || {};
+                             if(!finishers[p.id]) { // Make sure we only process once
+                                const rank = Object.keys(finishers).length + 1;
+                                const finishTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                                roomRef.child(`finishers/${p.id}`).set({name: p.name, rank, time: finishTime, emoji: p.emoji});
+                                // BUG FIX: The path was wrong. It should not have "players/" in it.
+                                roomRef.child(`${p.id}/hasFinished`).set(true);
+                             }
+                         });
                      }
-                 }
-            } else if (!isOnline) { // Offline logic
-                if (!player.isDead) {
-                    zombies.forEach(zombie => { if (Math.hypot(player.x - zombie.x, player.y - zombie.y) < TILE_SIZE * 0.6) { playerDied(); return; } });
-                    if(player.isDead) return;
-                    if (exit && exit.x && Math.hypot(player.x - exit.x, exit.y) < TILE_SIZE * 0.7) triggerEndScreen(true, "You");
+                 });
+            } else if (!isOnline && !player.isDead) { // OFFLINE LOGIC
+                zombies.forEach(zombie => { if (Math.hypot(player.x - zombie.x, player.y - zombie.y) < TILE_SIZE * 0.6) { playerDied(); return; } });
+                if(player.isDead) return;
+                
+                if (exit && exit.x && Math.hypot(player.x - exit.x, player.y - exit.y) < TILE_SIZE * 0.7) {
+                    triggerEndScreen(true, "You");
                 }
             }
 
@@ -382,21 +436,35 @@
         }
         
         function playerDied() {
-            if(player.isDead) return;
+            if(player.isDead) return; // prevent multiple triggers
             player.isDead = true;
             if(isOnline) { 
-                // Only local player can trigger this function. Host will verify via listener.
-                roomRef.child(`${playerId}/isDead`).set(true); 
                 showMenu(spectatorChoiceMenu); 
             } else { 
                 triggerEndScreen(false, "You"); 
             }
         }
         
+        function playerFinished(finishers) {
+             if(player.hasFinished) {
+                showMenu(finishedWaitScreen);
+                updateMiniLeaderboard(finishers);
+             }
+        }
+
+        function updateMiniLeaderboard(finishers) {
+            if(!finishers) return;
+            const sortedFinishers = Object.values(finishers).sort((a,b) => a.rank - b.rank);
+            miniLeaderboard.innerHTML = sortedFinishers.map(f => `<p>${f.rank}. ${f.name} - ${f.time}s</p>`).join('');
+        }
+
         function draw() {
             if (gameOver || !player) return;
             let cameraTarget = player;
-            if(player.isDead && spectatingPlayerId && onlinePlayers[spectatingPlayerId]) cameraTarget = onlinePlayers[spectatingPlayerId];
+            const isSpectating = player.isDead || player.hasFinished;
+            if(isSpectating && spectatingPlayerId && onlinePlayers[spectatingPlayerId]) {
+                 cameraTarget = onlinePlayers[spectatingPlayerId];
+            }
             if(!cameraTarget || !cameraTarget.x) return;
             ctx.fillStyle = '#1a202c'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.save(); ctx.translate(canvas.width / 2 - cameraTarget.x, canvas.height / 2 - cameraTarget.y);
@@ -407,7 +475,7 @@
             for (let y = sR; y < eR; y++) for (let x = sC; x < eC; x++) if (isWall(x, y)) ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             if(exit.x) ctx.fillText(EXIT_EMOJI, exit.x, exit.y);
             zombies.forEach(z => ctx.fillText(z.emoji, z.x, z.y));
-            Object.values(onlinePlayers).forEach(p => { if(p && !p.isDead) ctx.fillText(p.emoji, p.x, p.y); });
+            Object.values(onlinePlayers).forEach(p => { if(p && !p.isDead && !p.hasFinished) ctx.fillText(p.emoji, p.x, p.y); });
             ctx.restore();
             drawMinimap();
         }
@@ -420,7 +488,8 @@
             if (!online) {
                 maze = generateRealisticMaze(MAZE_WIDTH, MAZE_HEIGHT);
                 player = placeObject();
-                player.emoji = selectedAvatar; player.isDead = false;
+                player.emoji = selectedAvatar; player.isDead = false; player.hasFinished = false;
+                player.name = playerNameInput.value.trim() || `Player`;
                 exit = placeExit(player);
                 zombies = [];
                 for (let i = 0; i < NUM_ZOMBIES; i++) {
@@ -431,31 +500,65 @@
                     z.isChasing = false;
                     zombies.push(z);
                 }
+                onlinePlayers = { 'player1': player };
+                startTime = Date.now();
             }
             highScoreEl.textContent = highScore ? `${parseFloat(highScore).toFixed(1)}s` : 'N/A';
-            startTime = Date.now();
             showMenu(null); gameContainer.classList.remove('hidden');
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             gameLoop();
         }
 
-        function triggerEndScreen(isWin, winnerName) {
+        function triggerEndScreen(finishersOrWin, winnerName) {
             if (gameOver) return; gameOver = true;
-            if(isOnline && isHost) roomRef.update({gameState: 'finished', win: isWin, winnerName: winnerName});
-            cancelAnimationFrame(animationFrameId);
-            const score = ((Date.now() - startTime) / 1000);
-            document.getElementById('end-score').textContent = score.toFixed(1);
-            if (isWin) {
-                document.getElementById('end-title').textContent = 'ESCAPED!';
-                document.getElementById('end-title').className = 'font-creepster text-8xl text-green-500 mb-4';
-                document.getElementById('end-subtitle').textContent = `${winnerName} berhasil keluar!`;
-                if (!isOnline && (highScore === null || score < parseFloat(highScore))) { highScore = score; localStorage.setItem('zombieEscapeHighScore', highScore); }
-            } else {
-                document.getElementById('end-title').textContent = 'YOU DIED';
-                document.getElementById('end-title').className = 'font-creepster text-8xl text-red-600 mb-4';
-                document.getElementById('end-subtitle').textContent = `${winnerName} tertangkap!`;
+            if(isOnline && isHost) roomRef.update({gameState: 'finished'});
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            if (isOnline) {
+                const finishers = finishersOrWin || {};
+                const sortedFinishers = Object.values(finishers).sort((a,b) => a.rank - b.rank);
+                
+                if (sortedFinishers.length > 0) {
+                    document.getElementById('end-title').textContent = 'ESCAPED!';
+                    document.getElementById('end-title').className = 'font-creepster text-8xl text-green-500 mb-4';
+                    document.getElementById('end-subtitle').textContent = 'Beberapa survivor berhasil kabur!';
+                } else {
+                    document.getElementById('end-title').textContent = 'GAME OVER';
+                    document.getElementById('end-title').className = 'font-creepster text-8xl text-red-600 mb-4';
+                    document.getElementById('end-subtitle').textContent = 'Semua pemain tertangkap!';
+                }
+
+                let resultsHTML = '<ol class="text-left">';
+                sortedFinishers.forEach(p => {
+                    resultsHTML += `<li><span class="font-bold text-yellow-300">${p.rank}. ${p.name} ${p.emoji}</span> - ${p.time}s</li>`;
+                });
+                const deadPlayers = Object.values(onlinePlayers).filter(p => p.isDead);
+                if(deadPlayers.length > 0) {
+                    resultsHTML += '<li class="mt-4 text-red-400 font-bold">Tertangkap:</li>'
+                    deadPlayers.forEach(p => {
+                        resultsHTML += `<li class="text-red-400/80">${p.name} ${p.emoji}</li>`
+                    });
+                }
+                resultsHTML += '</ol>';
+                endResultsContainer.innerHTML = resultsHTML;
+
+            } else { // Offline logic
+                const isWin = finishersOrWin;
+                const score = ((Date.now() - startTime) / 1000);
+                endResultsContainer.innerHTML = `<p>Waktu Permainan: <span class="text-yellow-400 font-bold">${score.toFixed(1)}</span>s</p>`;
+                if (isWin) {
+                    document.getElementById('end-title').textContent = 'ESCAPED!';
+                    document.getElementById('end-title').className = 'font-creepster text-8xl text-green-500 mb-4';
+                    document.getElementById('end-subtitle').textContent = `${winnerName} berhasil keluar!`;
+                    if (highScore === null || score < parseFloat(highScore)) { highScore = score; localStorage.setItem('zombieEscapeHighScore', highScore); }
+                } else {
+                    document.getElementById('end-title').textContent = 'YOU DIED';
+                    document.getElementById('end-title').className = 'font-creepster text-8xl text-red-600 mb-4';
+                    document.getElementById('end-subtitle').textContent = `${winnerName} tertangkap!`;
+                }
             }
-            document.getElementById('end-high-score').textContent = highScore ? `${parseFloat(highScore).toFixed(1)}s` : 'Belum Ada';
+            
             showMenu(endScreen);
         }
 
@@ -480,9 +583,9 @@
             minimapCtx.fillStyle = 'rgba(100, 116, 139, 0.5)';
             for (let y = 0; y < MAZE_HEIGHT; y++) for (let x = 0; x < MAZE_WIDTH; x++) if (maze[y][x] === 1) minimapCtx.fillRect(x * tileW, y * tileH, tileW, tileH);
             const exitGrid = getGridCoords(exit.x, exit.y); minimapCtx.fillStyle = '#ef4444'; minimapCtx.beginPath(); minimapCtx.arc(exitGrid.x * tileW + tileW/2, exitGrid.y * tileH + tileH/2, tileW * 1.5, 0, 2 * Math.PI); minimapCtx.fill(); minimapCtx.strokeStyle = 'white'; minimapCtx.lineWidth = 1; minimapCtx.stroke();
-            const currentTarget = (player.isDead && spectatingPlayerId && onlinePlayers[spectatingPlayerId]) ? onlinePlayers[spectatingPlayerId] : player;
-            if (isOnline) { minimapCtx.fillStyle = 'rgba(59, 130, 246, 0.8)'; for(const id in onlinePlayers) { if(id === playerId || !onlinePlayers[id] || onlinePlayers[id].isDead) continue; const p = onlinePlayers[id]; if(p && p.x && p.y) { const pGrid = getGridCoords(p.x, p.y); minimapCtx.beginPath(); minimapCtx.arc(pGrid.x * tileW + tileW/2, pGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI); minimapCtx.fill(); } } }
-            if(currentTarget && currentTarget.x) { const pGrid = getGridCoords(currentTarget.x, currentTarget.y); minimapCtx.fillStyle = '#ffffff'; minimapCtx.beginPath(); minimapCtx.arc(pGrid.x * tileW + tileW/2, pGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI); minimapCtx.fill(); }
+            const currentTarget = (player.isDead || player.hasFinished) && spectatingPlayerId && onlinePlayers[spectatingPlayerId] ? onlinePlayers[spectatingPlayerId] : player;
+            if (isOnline) { minimapCtx.fillStyle = 'rgba(59, 130, 246, 0.8)'; for(const id in onlinePlayers) { if(id === playerId) continue; const p = onlinePlayers[id]; if(p && p.x && p.y && !p.isDead && !p.hasFinished) { const pGrid = getGridCoords(p.x, p.y); minimapCtx.beginPath(); minimapCtx.arc(pGrid.x * tileW + tileW/2, pGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI); minimapCtx.fill(); } } }
+            if(currentTarget && currentTarget.x && !currentTarget.isDead && !currentTarget.hasFinished) { const pGrid = getGridCoords(currentTarget.x, currentTarget.y); minimapCtx.fillStyle = '#ffffff'; minimapCtx.beginPath(); minimapCtx.arc(pGrid.x * tileW + tileW/2, pGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI); minimapCtx.fill(); }
         }
 
         // --- Event Listeners & Initial Setup ---
@@ -490,9 +593,9 @@
         onlineModeBtn.addEventListener('click', () => showMenu(onlineMenu));
         backToMainMenuBtn.addEventListener('click', () => showMenu(mainMenu));
         createRoomBtn.addEventListener('click', createRoom);
-        joinRoomBtn.addEventListener('click', () => { const code = roomCodeInput.value.trim().toUpperCase(); if(code.length === 4) joinRoom(code); else alert("Kode room harus 4 karakter!"); });
+        joinRoomBtn.addEventListener('click', () => { const code = roomCodeInput.value.trim().toUpperCase(); if(code.length === 4 && /^\d+$/.test(code)) joinRoom(code); else alert("Kode room harus 4 angka!"); });
         startOnlineGameBtn.addEventListener('click', () => { if(isHost) roomRef.update({gameState: 'playing', startTime: firebase.database.ServerValue.TIMESTAMP}); });
-        restartButton.addEventListener('click', () => { gameContainer.classList.add('hidden'); if(isOnline) leaveRoom(); else showMenu(mainMenu); });
+        restartButton.addEventListener('click', () => { gameContainer.classList.add('hidden'); if(isOnline) leaveRoom(); else { gameOver = true; showMenu(mainMenu); }});
         spectateBtn.addEventListener('click', () => { showMenu(null); gameContainer.classList.remove('hidden'); spectatorInfo.classList.remove('hidden'); exitSpectatorBtn.classList.remove('hidden'); });
         exitRoomBtn.addEventListener('click', leaveRoom);
         exitSpectatorBtn.addEventListener('click', leaveRoom);
@@ -512,3 +615,4 @@
     </script>
 </body>
 </html>
+�
