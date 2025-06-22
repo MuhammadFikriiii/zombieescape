@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Escape: Edisi Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script>
+      // Firebase Config
+      const firebaseConfig = {
+        apiKey: "AIzaSyBHK0gVjtp1pHUpPszjYzJRABlydaceOGw",
+        authDomain: "zombie-escape-efa47.firebaseapp.com",
+        databaseURL: "https://zombie-escape-efa47-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "zombie-escape-efa47",
+        storageBucket: "zombie-escape-efa47.firebasestorage.app",
+        messagingSenderId: "410336547455",
+        appId: "1:410336547455:web:1de993a31e97fe5a20654a"
+      };
+
+      // Inisialisasi Firebase
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+    </script>
+
+    <style>
+        body { font-family: 'Chakra Petch', sans-serif; overflow: hidden; background-color: #000; }
+        .font-creepster { font-family: 'Creepster', cursive; }
+        canvas#game-canvas { background-color: #1a202c; display: block; }
+        .dpad-btn { -webkit-user-select: none; user-select: none; border: 2px solid rgba(255,255,255,0.2); transition: all 0.1s ease-in-out; }
+        .dpad-btn:active { background-color: rgba(239, 68, 68, 0.7) !important; transform: scale(0.95); }
+        .game-button { box-shadow: 0px 5px 15px rgba(0,0,0,0.4); transition: all 0.2s ease; }
+        .game-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0px 8px 20px rgba(0,0,0,0.5); }
+        .game-button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #game-ui p { text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        #minimap-container { border: 2px solid rgba(255, 255, 255, 0.2); background-color: rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
+        .avatar-btn { transition: all 0.2s ease; cursor: pointer; border: 2px solid transparent; border-radius: 0.5rem; font-size: 1.5rem; }
+        .avatar-btn.selected { background-color: #ef4444; border-color: #f87171; transform: scale(1.1); }
+        .avatar-btn:hover:not(.selected) { background-color: rgba(255,255,255,0.1); transform: scale(1.1); }
+        .menu-screen { position: absolute; inset: 0; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 40; padding: 1rem; text-align: center; }
+        .hidden { display: none !important; }
+        #room-code-display { font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5em; }
+        #spectator-info { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); background-color: rgba(239, 68, 68, 0.8); padding: 5px 15px; border-radius: 10px; font-weight: bold; z-index: 30; }
+    </style>
+</head>
+<body class="bg-black text-white select-none">
+
+    <div id="main-container" class="relative w-screen h-screen">
+
+        <!-- Main Menu -->
+        <div id="main-menu" class="menu-screen">
+            <h1 class="font-creepster text-7xl md:text-9xl text-red-600 tracking-wider" style="text-shadow: 3px 3px 0px #000;">ZOMBIE ESCAPE</h1>
+            <div class="w-full max-w-md mt-4">
+                <input type="text" id="player-name" class="w-full bg-gray-900 border-2 border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 transition text-center text-lg" placeholder="Nama Survivor...">
+                
+                <label class="block text-left text-gray-400 mb-2 mt-4">Pilih Avatar:</label>
+                <div id="avatar-selection" class="grid grid-cols-7 md:grid-cols-10 gap-2 bg-gray-900/50 p-2 rounded-lg">
+                    <!-- Avatars will be injected by JS -->
+                </div>
+
+                <p class="text-lg text-gray-300 mt-8 mb-4 font-bold">Pilih Mode:</p>
+                <div class="flex flex-col md:flex-row gap-4">
+                     <button id="online-mode-btn" class="game-button w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Online</button>
+                     <button id="offline-mode-btn" class="game-button w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Offline</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Online Menu -->
+        <div id="online-menu" class="menu-screen hidden">
+            <h2 class="text-5xl font-bold mb-8">Mode Online</h2>
+            <div class="w-full max-w-sm">
+                <button id="create-room-btn" class="game-button w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-xl">Buat Room Baru</button>
+                <div class="my-4 text-gray-400">atau</div>
+                <input type="text" id="room-code-input" class="w-full bg-gray-900 border-2 border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 transition text-center text-lg uppercase" placeholder="Masukkan Kode Room (4 Angka)">
+                <button id="join-room-btn" class="game-button w-full mt-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 rounded-lg text-xl">Gabung Room</button>
+                <button id="back-to-main-menu-btn" class="game-button w-full mt-8 bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 rounded-lg">Kembali</button>
+            </div>
+        </div>
+        
+        <!-- Waiting Room -->
+        <div id="waiting-room" class="menu-screen hidden">
+             <h2 class="text-4xl font-bold mb-4">Menunggu Pemain Lain...</h2>
+             <p class="text-lg mb-2">Bagikan Kode Room ini:</p>
+             <p id="room-code-display" class="text-5xl font-bold bg-gray-900 px-4 py-2 rounded-lg text-green-400 mb-8">----</p>
+             <p class="text-lg mb-2">Pemain di Room:</p>
+             <ul id="player-list" class="text-left mb-8 min-h-[100px] bg-black/20 p-4 rounded-lg w-full max-w-sm"></ul>
+             <button id="start-online-game-btn" class="game-button bg-red-700 hover:bg-red-800 text-white font-bold py-3 px-8 rounded-lg text-2xl hidden">Mulai Permainan</button>
+             <div id="waiting-for-host-text" class="text-yellow-400">Menunggu host memulai permainan...</div>
+        </div>
+
+        <!-- NEW: Spectator Choice Menu -->
+        <div id="spectator-choice-menu" class="menu-screen hidden">
+            <h2 class="font-creepster text-8xl text-red-600 mb-4">YOU DIED</h2>
+            <p class="text-xl text-gray-300 mb-8">Kamu telah tertangkap!</p>
+            <div class="flex flex-col md:flex-row gap-4">
+                <button id="spectate-btn" class="game-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Tonton Teman</button>
+                <button id="exit-room-btn" class="game-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg text-xl">Keluar dari Room</button>
+            </div>
+        </div>
+
+        <!-- Game Container -->
+        <div id="game-container" class="w-screen h-screen hidden">
+            <canvas id="game-canvas"></canvas>
+            <div id="game-ui" class="absolute top-0 left-0 p-4 text-white font-bold flex justify-between items-start w-full z-20 pointer-events-none">
+                 <div class="flex flex-col items-start md:flex-row md:items-center">
+                    <div class="bg-black bg-opacity-40 p-2 px-4 rounded-lg"><p>Waktu: <span id="timer">0.0</span>s</p></div>
+                    <div class="bg-black bg-opacity-40 p-2 px-4 rounded-lg mt-2 md:mt-0 md:ml-4"><p>Terbaik (Offline): <span id="high-score-display">N/A</span></p></div>
+                 </div>
+                 <div id="minimap-container" class="p-1 rounded-lg pointer-events-auto"><canvas id="minimap-canvas" width="150" height="150"></canvas></div>
+            </div>
+            <div id="spectator-info" class="hidden"></div>
+            <div id="mobile-controls" class="absolute bottom-5 right-5 z-20 grid grid-cols-3 gap-2 w-48 h-48 pointer-events-auto sm:hidden"></div>
+        </div>
+
+        <!-- End Screen -->
+        <div id="end-screen-template" class="menu-screen hidden">
+             <h2 id="end-title" class="font-creepster text-8xl mb-4"></h2>
+            <p id="end-subtitle" class="text-xl text-gray-300"></p>
+            <div class="mt-6 text-2xl">
+                <p>Waktu Permainan: <span id="end-score" class="text-yellow-400 font-bold"></span>s</p>
+                <p>Terbaik (Offline): <span id="end-high-score" class="text-yellow-400 font-bold"></span></p>
+            </div>
+            <button id="restart-button" class="game-button mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-xl">Kembali ke Menu</button>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // === DOM Elements ===
+        const allMenus = document.querySelectorAll('.menu-screen');
+        const mainMenu = document.getElementById('main-menu');
+        const onlineMenu = document.getElementById('online-menu');
+        const waitingRoom = document.getElementById('waiting-room');
+        const spectatorChoiceMenu = document.getElementById('spectator-choice-menu'); // NEW
+        const gameContainer = document.getElementById('game-container');
+        const endScreen = document.getElementById('end-screen-template');
+        
+        // Buttons
+        const onlineModeBtn = document.getElementById('online-mode-btn');
+        const offlineModeBtn = document.getElementById('offline-mode-btn');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const joinRoomBtn = document.getElementById('join-room-btn');
+        const backToMainMenuBtn = document.getElementById('back-to-main-menu-btn');
+        const startOnlineGameBtn = document.getElementById('start-online-game-btn');
+        const restartButton = document.getElementById('restart-button');
+        const spectateBtn = document.getElementById('spectate-btn'); // NEW
+        const exitRoomBtn = document.getElementById('exit-room-btn'); // NEW
+        
+        const avatarSelectionContainer = document.getElementById('avatar-selection');
+        const playerNameInput = document.getElementById('player-name');
+        const roomCodeInput = document.getElementById('room-code-input');
+        const roomCodeDisplay = document.getElementById('room-code-display');
+        const playerList = document.getElementById('player-list');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const timerEl = document.getElementById('timer');
+        const highScoreEl = document.getElementById('high-score-display');
+        const spectatorInfo = document.getElementById('spectator-info');
+
+        // === Game Constants & State ===
+        const TILE_SIZE = 50, MAZE_WIDTH = 51, MAZE_HEIGHT = 51, PLAYER_SPEED = 2.8;
+        const ZOMBIE_WANDER_SPEED = 0.8, ZOMBIE_CHASE_SPEED = 2.0, NUM_ZOMBIES = 50;
+        const ZOMBIE_DETECTION_RADIUS = TILE_SIZE * 10;
+        const ZOMBIE_EMOJIS = ['🧛‍♀️', '🧟‍♀️', '🧟‍♂️'], EXIT_EMOJI = '🚪';
+        const AVATAR_OPTIONS = ['👨','👩','🧑','👧','👦','🧒','👶','👵','👴','🧔','🕵️‍♂️','👩‍⚕️','👩‍🎓','👩‍🍳','👩‍🚀','👨‍💻','🦹‍♂️','🤹‍♀️','🤦‍♂️','🙇‍♂️'];
+        let maze = [], player = {}, zombies = [], exit = {}, keys = { w: false, a: false, s: false, d: false };
+        let animationFrameId, startTime, highScore = localStorage.getItem('zombieEscapeHighScore') || null, gameOver = false;
+        let selectedAvatar = '🧑';
+        let isOnline = false, isHost = false, roomCode = null, playerId = null, roomRef = null, onlinePlayers = {};
+        let spectatingPlayerId = null; 
+        
+        // --- Helper Functions ---
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function generateRealisticMaze(width, height) {
+            let maze = Array.from({ length: height }, () => Array(width).fill(1));
+            function carve(x, y) {
+                const directions = [[0, -2], [2, 0], [0, 2], [-2, 0]];
+                directions.sort(() => Math.random() - 0.5);
+                for (const [dx, dy] of directions) {
+                    const [nx, ny] = [x + dx, y + dy];
+                    if (ny > 0 && ny < height - 1 && nx > 0 && nx < width - 1 && maze[ny][nx] === 1) {
+                        maze[y + dy / 2][x + dx / 2] = 0;
+                        maze[ny][nx] = 0;
+                        carve(nx, ny);
+                    }
+                }
+            }
+            maze[1][1] = 0;
+            carve(1, 1);
+            const loops = Math.floor((width * height) / 20);
+            for (let i = 0; i < loops; i++) {
+                let x, y, tries = 0;
+                do {
+                    x = Math.floor(Math.random() * (width - 2)) + 1;
+                    y = Math.floor(Math.random() * (height - 2)) + 1;
+                    tries++;
+                } while (maze[y][x] !== 1 && tries < 100);
+                if ((x > 0 && x < width - 1 && maze[y][x - 1] === 0 && maze[y][x + 1] === 0) || (y > 0 && y < height - 1 && maze[y - 1][x] === 0 && maze[y + 1][x] === 0)) {
+                    maze[y][x] = 0;
+                }
+            }
+            return maze;
+        }
+
+        function isWall(gridX, gridY) {
+            if (!maze || maze.length === 0) return true;
+            if (gridY < 0 || gridY >= MAZE_HEIGHT || gridX < 0 || gridX >= MAZE_WIDTH) return true;
+            return maze[gridY][gridX] === 1;
+        }
+
+        function isWallByPixels(pixelX, pixelY, padding = 0) {
+            const gridX1 = Math.floor((pixelX - padding) / TILE_SIZE);
+            const gridY1 = Math.floor((pixelY - padding) / TILE_SIZE);
+            const gridX2 = Math.floor((pixelX + padding) / TILE_SIZE);
+            const gridY2 = Math.floor((pixelY + padding) / TILE_SIZE);
+            return isWall(gridX1, gridY1) || isWall(gridX2, gridY1) || isWall(gridX1, gridY2) || isWall(gridX2, gridY2);
+        }
+
+        function hasLineOfSight(start, end) {
+            const dx = end.x - start.x, dy = end.y - start.y;
+            const dist = Math.hypot(dx, dy);
+            const steps = Math.max(1, Math.floor(dist / 8));
+            const stepX = dx / steps, stepY = dy / steps;
+            for (let i = 1; i < steps; i++) {
+                if (isWallByPixels(start.x + i * stepX, start.y + i * stepY)) return false;
+            }
+            return true;
+        }
+        
+        function getGridCoords(x, y) {
+            return { x: Math.floor(x / TILE_SIZE), y: Math.floor(y / TILE_SIZE) };
+        }
+
+        function placeObject() {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * (MAZE_WIDTH - 2)) + 1;
+                y = Math.floor(Math.random() * (MAZE_HEIGHT - 2)) + 1;
+            } while (isWall(x, y));
+            return { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 };
+        }
+        
+        function placeExit(playerPos) {
+            let bestPos = null;
+            let maxDist = 0;
+            for (let i = 0; i < 300; i++) {
+                const pos = placeObject();
+                const dist = Math.hypot(pos.x - playerPos.x, pos.y - playerPos.y);
+                if (dist > maxDist) {
+                    maxDist = dist;
+                    bestPos = pos;
+                }
+            }
+            return bestPos || placeObject();
+        }
+
+        // --- Navigation & UI ---
+        function showMenu(menuElement) {
+            allMenus.forEach(m => m.classList.add('hidden'));
+            if (menuElement) menuElement.classList.remove('hidden');
+        }
+
+        function setLoadingState(button, isLoading, text = "Loading...") {
+            if (isLoading) {
+                button.disabled = true;
+                button.dataset.originalText = button.textContent;
+                button.textContent = text;
+            } else {
+                if(button.dataset.originalText) {
+                    button.disabled = false;
+                    button.textContent = button.dataset.originalText;
+                }
+            }
+        }
+
+        // --- Firebase Functions ---
+        async function createRoom() {
+            setLoadingState(createRoomBtn, true, "Mencari room...");
+            setLoadingState(joinRoomBtn, true);
+            try {
+                isHost = true;
+                let roomExists = true;
+                let newRoomCode;
+                let attempts = 0;
+
+                while(roomExists && attempts < 20) {
+                    newRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
+                    const roomSnapshot = await db.ref(`rooms/${newRoomCode}`).get();
+                    roomExists = roomSnapshot.exists();
+                    attempts++;
+                }
+
+                if (roomExists) throw new Error("Gagal menemukan room kosong. Coba lagi.");
+                
+                roomCode = newRoomCode;
+                roomRef = db.ref(`rooms/${roomCode}`);
+                setLoadingState(createRoomBtn, true, "Membuat room...");
+                
+                maze = generateRealisticMaze(MAZE_WIDTH, MAZE_HEIGHT);
+                exit = placeExit({x:0, y:0});
+                
+                const initialZombies = Array.from({length: NUM_ZOMBIES}, () => {
+                    const z = placeObject();
+                    return { x: z.x, y: z.y, emoji: ZOMBIE_EMOJIS[Math.floor(Math.random() * ZOMBIE_EMOJIS.length)], dx: Math.random() * 2 * Math.PI, ttcd: Math.floor(Math.random() * 120) + 90, chasing: false };
+                });
+
+                await roomRef.set({ maze, exit, zombies: initialZombies, gameState: 'waiting', hostId: '', createdAt: firebase.database.ServerValue.TIMESTAMP });
+                await joinRoom(roomCode);
+            } catch (error) {
+                console.error("Gagal membuat room:", error);
+                alert(`Gagal membuat room: ${error.message}`);
+                setLoadingState(createRoomBtn, false);
+                setLoadingState(joinRoomBtn, false);
+            }
+        }
+
+        async function joinRoom(code) {
+            setLoadingState(joinRoomBtn, true, "Mencari...");
+            setLoadingState(createRoomBtn, true);
+            try {
+                const snapshot = await db.ref(`rooms/${code}`).get();
+                if (!snapshot.exists()) throw new Error("Room tidak ditemukan!");
+                if (snapshot.val().gameState !== 'waiting') throw new Error("Permainan sudah dimulai atau selesai!");
+                
+                maze = snapshot.val().maze; 
+
+                roomCode = code;
+                roomRef = db.ref(`rooms/${roomCode}`);
+                
+                const playerRef = roomRef.child('players').push();
+                playerId = playerRef.key;
+                if (isHost) { await roomRef.child('hostId').set(playerId); }
+
+                const myPlayer = placeObject();
+                myPlayer.emoji = selectedAvatar;
+                myPlayer.name = playerNameInput.value.trim() || `Player_${playerId.substring(0,3)}`;
+                myPlayer.isDead = false;
+
+                await playerRef.set(myPlayer);
+                playerRef.onDisconnect().remove();
+
+                listenToRoom();
+                showMenu(waitingRoom);
+            } catch(error) {
+                console.error("Gagal bergabung ke room:", error);
+                alert(`Gagal bergabung: ${error.message}`);
+            } finally {
+                setLoadingState(joinRoomBtn, false);
+                setLoadingState(createRoomBtn, false);
+            }
+        }
+        
+        function listenToRoom() {
+            roomCodeDisplay.textContent = roomCode;
+            roomRef.on('value', (snapshot) => {
+                if(gameOver) return;
+                const roomData = snapshot.val();
+                if (!roomData) {
+                    alert("Host telah keluar. Kembali ke menu.");
+                    leaveRoom();
+                    return;
+                }
+                
+                onlinePlayers = roomData.players || {};
+                playerList.innerHTML = '';
+                let livingPlayers = [];
+                for (const id in onlinePlayers) {
+                    const p = onlinePlayers[id];
+                    if (p) {
+                         const li = document.createElement('li');
+                         li.textContent = `${p.isDead ? '💀' : p.emoji} ${p.name}`;
+                         playerList.appendChild(li);
+                         if (!p.isDead) livingPlayers.push({id, ...p});
+                    }
+                }
+
+                if (player.isDead) {
+                    if (!spectatingPlayerId || !onlinePlayers[spectatingPlayerId] || onlinePlayers[spectatingPlayerId].isDead) {
+                        const nextSpectatee = livingPlayers.find(p => p.id !== playerId);
+                        spectatingPlayerId = nextSpectatee ? nextSpectatee.id : null;
+                    }
+                    if(spectatingPlayerId && onlinePlayers[spectatingPlayerId]) {
+                        spectatorInfo.textContent = `Menonton: ${onlinePlayers[spectatingPlayerId].name}`;
+                        spectatorInfo.classList.remove('hidden');
+                    } else {
+                        spectatorInfo.classList.add('hidden');
+                    }
+                }
+                
+                if(isHost && roomData.gameState === 'playing' && livingPlayers.length === 0 && Object.keys(onlinePlayers).length > 0) {
+                    triggerEndScreen(false, "Semua pemain");
+                }
+                
+                if (isHost && playerId === roomData.hostId) {
+                    startOnlineGameBtn.classList.remove('hidden');
+                    waitingRoom.querySelector('#waiting-for-host-text').classList.add('hidden');
+                } else {
+                    startOnlineGameBtn.classList.add('hidden');
+                    waitingRoom.querySelector('#waiting-for-host-text').classList.remove('hidden');
+                }
+
+                if (roomData.gameState === 'playing' && gameContainer.classList.contains('hidden')) {
+                    maze = roomData.maze;
+                    exit = roomData.exit;
+                    zombies = roomData.zombies.map(z => ({...z, directionAngle: z.dx, timeToChangeDirection: z.ttcd, isChasing: z.chasing}));
+                    if(onlinePlayers[playerId]) {
+                       player = {...onlinePlayers[playerId]};
+                       initGame(true);
+                    }
+                }
+                if (!isHost && roomData.zombies) {
+                   zombies = roomData.zombies.map(z => ({...z, directionAngle: z.dx, timeToChangeDirection: z.ttcd, isChasing: z.chasing}));
+                }
+                if (roomData.gameState === 'finished') {
+                    triggerEndScreen(roomData.win, roomData.winnerName);
+                }
+            });
+        }
+        
+        function leaveRoom() {
+            if (roomRef) roomRef.off();
+            if (isHost && roomCode) db.ref(`rooms/${roomCode}`).remove();
+            isOnline = false; isHost = false; roomCode = null; playerId = null; roomRef = null;
+            gameOver = false;
+            showMenu(mainMenu);
+        }
+
+        function updatePlayerPositionOnline() {
+            if(isOnline && playerId && roomRef && !player.isDead) {
+                roomRef.child(`players/${playerId}`).update({ x: player.x, y: player.y });
+            }
+        }
+
+        // --- Core Game Logic ---
+        function update() {
+            if (gameOver) return;
+            if(!player.isDead) {
+                const pSize = TILE_SIZE * 0.3;
+                let moveX = 0, moveY = 0;
+                if (keys.a) moveX -= PLAYER_SPEED;
+                if (keys.d) moveX += PLAYER_SPEED;
+                if (keys.w) moveY -= PLAYER_SPEED;
+                if (keys.s) moveY += PLAYER_SPEED;
+                if (moveX !== 0) {
+                    const nextX = player.x + moveX;
+                    if (!isWallByPixels(nextX, player.y, pSize)) player.x = nextX;
+                }
+                if (moveY !== 0) {
+                    const nextY = player.y + moveY;
+                    if (!isWallByPixels(player.x, nextY, pSize)) player.y = nextY;
+                }
+                if(isOnline) updatePlayerPositionOnline();
+            }
+
+            if (!isOnline || isHost) {
+                const playersForZombies = isOnline ? Object.values(onlinePlayers).filter(p => p && !p.isDead) : [player];
+                zombies.forEach(zombie => {
+                    let closestPlayer = null;
+                    let minDistance = ZOMBIE_DETECTION_RADIUS;
+                    playersForZombies.forEach(p => {
+                        const d = Math.hypot(p.x - zombie.x, p.y - zombie.y);
+                        if(d < minDistance) {
+                           minDistance = d;
+                           closestPlayer = p;
+                        }
+                    });
+
+                    if (closestPlayer && hasLineOfSight(zombie, closestPlayer)) {
+                        zombie.isChasing = true;
+                        zombie.target = closestPlayer;
+                    } else {
+                        zombie.isChasing = false;
+                        zombie.target = null;
+                    }
+
+                    let speed = zombie.isChasing ? ZOMBIE_CHASE_SPEED : ZOMBIE_WANDER_SPEED;
+                    let angle = zombie.directionAngle;
+                    if(zombie.isChasing) {
+                        angle = Math.atan2(zombie.target.y - zombie.y, zombie.target.x - zombie.x);
+                    } else {
+                        zombie.timeToChangeDirection--;
+                         if (zombie.timeToChangeDirection <= 0) {
+                            zombie.directionAngle = Math.random() * 2 * Math.PI;
+                            angle = zombie.directionAngle;
+                            zombie.timeToChangeDirection = Math.floor(Math.random() * 120) + 90;
+                        }
+                    }
+                    const zPrevX = zombie.x, zPrevY = zombie.y;
+                    zombie.x += Math.cos(angle) * speed;
+                    zombie.y += Math.sin(angle) * speed;
+                    if (isWallByPixels(zombie.x, zombie.y, TILE_SIZE*0.2)) {
+                        zombie.x = zPrevX; zombie.y = zPrevY;
+                        zombie.timeToChangeDirection = 0; 
+                    }
+                });
+                 if (isOnline && isHost) {
+                    roomRef.child('zombies').set(zombies.map(z => ({x: z.x, y: z.y, emoji: z.emoji, dx: z.directionAngle, ttcd: z.timeToChangeDirection, chasing: z.isChasing})));
+                }
+            }
+            
+            if (!player.isDead) {
+                zombies.forEach(zombie => {
+                    // BUG FIX: Corrected collision check
+                    if (Math.hypot(player.x - zombie.x, player.y - zombie.y) < TILE_SIZE * 0.6) {
+                        playerDied();
+                        return; // Exit loop after dying
+                    }
+                });
+
+                if(player.isDead) return;
+
+                if (exit && exit.x && Math.hypot(player.x - exit.x, exit.y) < TILE_SIZE * 0.7) {
+                     if (isOnline) {
+                        if (isHost) triggerEndScreen(true, player.name || "You");
+                     } else {
+                        triggerEndScreen(true, "You");
+                     }
+                }
+            }
+
+            if(startTime) timerEl.textContent = ((Date.now() - startTime) / 1000).toFixed(1);
+        }
+        
+        function playerDied() {
+            if(player.isDead) return;
+            player.isDead = true;
+            if(isOnline) {
+                roomRef.child(`players/${playerId}/isDead`).set(true);
+                showMenu(spectatorChoiceMenu); // Show choice menu instead of auto-spectating
+            } else {
+                triggerEndScreen(false, "You");
+            }
+        }
+        
+        function draw() {
+            if (gameOver || !player) return;
+            let cameraTarget = player;
+            if(player.isDead && spectatingPlayerId && onlinePlayers[spectatingPlayerId]) {
+                cameraTarget = onlinePlayers[spectatingPlayerId];
+            }
+            if(!cameraTarget || !cameraTarget.x) return;
+
+            ctx.fillStyle = '#1a202c';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(canvas.width / 2 - cameraTarget.x, canvas.height / 2 - cameraTarget.y);
+            const emojiFontSize = TILE_SIZE * 0.8;
+            ctx.font = `${emojiFontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const startCol = Math.floor((cameraTarget.x - canvas.width / 2 - TILE_SIZE) / TILE_SIZE);
+            const endCol = Math.ceil((cameraTarget.x + canvas.width / 2 + TILE_SIZE) / TILE_SIZE);
+            const startRow = Math.floor((cameraTarget.y - canvas.height / 2 - TILE_SIZE) / TILE_SIZE);
+            const endRow = Math.ceil((cameraTarget.y + canvas.height / 2 + TILE_SIZE) / TILE_SIZE);
+            ctx.fillStyle = '#4a5568'; 
+            for (let y = startRow; y < endRow; y++) {
+                for (let x = startCol; x < endCol; x++) {
+                    if (y >= 0 && y < MAZE_HEIGHT && x >= 0 && x < MAZE_WIDTH && maze[y][x] === 1) {
+                         ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+            }
+            if(exit.x) ctx.fillText(EXIT_EMOJI, exit.x, exit.y);
+            zombies.forEach(zombie => ctx.fillText(zombie.emoji, zombie.x, zombie.y));
+            if (isOnline) {
+                Object.values(onlinePlayers).forEach(p => {
+                    if(p && !p.isDead) ctx.fillText(p.emoji, p.x, p.y);
+                });
+            } else {
+                if(player.emoji && !player.isDead) ctx.fillText(player.emoji, player.x, player.y);
+            }
+            ctx.restore();
+            drawMinimap();
+        }
+
+        function initGame(online = false) {
+            isOnline = online;
+            gameOver = false;
+            spectatorInfo.classList.add('hidden');
+            resizeCanvas();
+            if (!online) {
+                maze = generateRealisticMaze(MAZE_WIDTH, MAZE_HEIGHT);
+                player = placeObject();
+                player.emoji = selectedAvatar;
+                player.isDead = false;
+                exit = placeExit(player);
+                zombies = [];
+                for (let i = 0; i < NUM_ZOMBIES; i++) {
+                    const zombie = placeObject();
+                    zombie.emoji = ZOMBIE_EMOJIS[Math.floor(Math.random() * ZOMBIE_EMOJIS.length)];
+                    zombie.directionAngle = Math.random() * 2 * Math.PI;
+                    zombie.timeToChangeDirection = Math.floor(Math.random() * 180) + 60;
+                    zombie.isChasing = false;
+                    zombies.push(zombie);
+                }
+            }
+            highScoreEl.textContent = highScore ? `${parseFloat(highScore).toFixed(1)}s` : 'N/A';
+            startTime = Date.now();
+            showMenu(null);
+            gameContainer.classList.remove('hidden');
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        function triggerEndScreen(isWin, winnerName) {
+            if (gameOver) return;
+            gameOver = true;
+            if(isOnline && isHost) {
+                roomRef.update({gameState: 'finished', win: isWin, winnerName: winnerName});
+            }
+            cancelAnimationFrame(animationFrameId);
+            const score = ((Date.now() - startTime) / 1000);
+            document.getElementById('end-score').textContent = score.toFixed(1);
+            if (isWin) {
+                document.getElementById('end-title').textContent = 'ESCAPED!';
+                document.getElementById('end-title').className = 'font-creepster text-8xl text-green-500 mb-4';
+                document.getElementById('end-subtitle').textContent = `${winnerName} berhasil keluar!`;
+                if (!isOnline && (highScore === null || score < parseFloat(highScore))) {
+                    highScore = score;
+                    localStorage.setItem('zombieEscapeHighScore', highScore);
+                }
+            } else {
+                document.getElementById('end-title').textContent = 'YOU DIED';
+                document.getElementById('end-title').className = 'font-creepster text-8xl text-red-600 mb-4';
+                document.getElementById('end-subtitle').textContent = `${winnerName} tertangkap!`;
+            }
+            document.getElementById('end-high-score').textContent = highScore ? `${parseFloat(highScore).toFixed(1)}s` : 'Belum Ada';
+            showMenu(endScreen);
+        }
+
+        function populateAvatarSelection() {
+            avatarSelectionContainer.innerHTML = '';
+            AVATAR_OPTIONS.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.className = 'avatar-btn p-1';
+                btn.textContent = emoji;
+                if (emoji === selectedAvatar) btn.classList.add('selected');
+                btn.addEventListener('click', () => {
+                    selectedAvatar = emoji;
+                    document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                });
+                avatarSelectionContainer.appendChild(btn);
+            });
+        }
+        
+        function gameLoop() {
+            if(gameOver) return;
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function drawMinimap() {
+            if (!maze || maze.length === 0 || !exit || !player) return;
+            const mapW = minimapCanvas.width, mapH = minimapCanvas.height;
+            const tileW = mapW / MAZE_WIDTH, tileH = mapH / MAZE_HEIGHT;
+            minimapCtx.clearRect(0, 0, mapW, mapH);
+            minimapCtx.fillStyle = 'rgba(100, 116, 139, 0.5)';
+            for (let y = 0; y < MAZE_HEIGHT; y++) {
+                for (let x = 0; x < MAZE_WIDTH; x++) {
+                    if (maze[y][x] === 1) minimapCtx.fillRect(x * tileW, y * tileH, tileW, tileH);
+                }
+            }
+            const exitGrid = getGridCoords(exit.x, exit.y);
+            minimapCtx.fillStyle = '#ef4444';
+            minimapCtx.beginPath();
+            minimapCtx.arc(exitGrid.x * tileW + tileW/2, exitGrid.y * tileH + tileH/2, tileW * 1.5, 0, 2 * Math.PI);
+            minimapCtx.fill();
+            minimapCtx.strokeStyle = 'white';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.stroke();
+            
+            if (isOnline) {
+                minimapCtx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+                for(const id in onlinePlayers) {
+                    if(id === playerId || !onlinePlayers[id] || onlinePlayers[id].isDead) continue;
+                    const p = onlinePlayers[id];
+                    if(p && p.x && p.y) {
+                         const pGrid = getGridCoords(p.x, p.y);
+                         minimapCtx.beginPath();
+                         minimapCtx.arc(pGrid.x * tileW + tileW/2, pGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI);
+                         minimapCtx.fill();
+                    }
+                }
+            }
+
+            const currentTarget = (player.isDead && spectatingPlayerId && onlinePlayers[spectatingPlayerId]) ? onlinePlayers[spectatingPlayerId] : player;
+            if(currentTarget && currentTarget.x) {
+                const playerGrid = getGridCoords(currentTarget.x, currentTarget.y);
+                minimapCtx.fillStyle = '#ffffff';
+                minimapCtx.beginPath();
+                minimapCtx.arc(playerGrid.x * tileW + tileW/2, playerGrid.y * tileH + tileH/2, tileW * 1.2, 0, 2 * Math.PI);
+                minimapCtx.fill();
+            }
+        }
+
+        // --- Event Listeners & Initial Setup ---
+        offlineModeBtn.addEventListener('click', () => initGame(false));
+        onlineModeBtn.addEventListener('click', () => showMenu(onlineMenu));
+        backToMainMenuBtn.addEventListener('click', () => showMenu(mainMenu));
+        createRoomBtn.addEventListener('click', createRoom);
+        joinRoomBtn.addEventListener('click', () => {
+            const code = roomCodeInput.value.trim().toUpperCase();
+            if(code.length === 4) joinRoom(code);
+            else alert("Kode room harus 4 karakter!");
+        });
+        startOnlineGameBtn.addEventListener('click', () => {
+             if(isHost) roomRef.update({gameState: 'playing', startTime: firebase.database.ServerValue.TIMESTAMP});
+        });
+        restartButton.addEventListener('click', () => {
+            gameContainer.classList.add('hidden');
+            if(isOnline) leaveRoom();
+            else showMenu(mainMenu);
+        });
+        spectateBtn.addEventListener('click', () => {
+            showMenu(null); // Hide menu
+            gameContainer.classList.remove('hidden'); // Show game again
+            spectatorInfo.classList.remove('hidden');
+        });
+        exitRoomBtn.addEventListener('click', leaveRoom);
+        
+        populateAvatarSelection();
+        resizeCanvas();
+        highScoreEl.textContent = highScore ? `${parseFloat(highScore).toFixed(1)}s` : 'N/A';
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+        
+        const dpadContainer = document.querySelector('#mobile-controls');
+        dpadContainer.innerHTML = `<div></div><div id="dpad-up" class="dpad-btn bg-gray-800 bg-opacity-50 rounded-full flex justify-center items-center text-3xl">▲</div><div></div><div id="dpad-left" class="dpad-btn bg-gray-800 bg-opacity-50 rounded-full flex justify-center items-center text-3xl">◄</div><div></div><div id="dpad-right" class="dpad-btn bg-gray-800 bg-opacity-50 rounded-full flex justify-center items-center text-3xl">►</div><div></div><div id="dpad-down" class="dpad-btn bg-gray-800 bg-opacity-50 rounded-full flex justify-center items-center text-3xl">▼</div><div></div>`;
+        ['up', 'down', 'left', 'right'].forEach(dir => {
+            const btn = document.getElementById(`dpad-${dir}`);
+            const key = {up: 'w', down: 's', left: 'a', right: 'd'}[dir];
+            const eventStart = (e) => { e.preventDefault(); keys[key] = true; };
+            const eventEnd = (e) => { e.preventDefault(); keys[key] = false; };
+            btn.addEventListener('touchstart', eventStart);
+            btn.addEventListener('touchend', eventEnd);
+            btn.addEventListener('mousedown', eventStart);
+            btn.addEventListener('mouseup', eventEnd);
+            btn.addEventListener('mouseleave', eventEnd);
+        });
+
+        // --- BUG FIX: Firebase Connection Checker ---
+        const connectedRef = db.ref(".info/connected");
+        connectedRef.on("value", (snap) => {
+          if (snap.val() === true) {
+            onlineModeBtn.disabled = false;
+            onlineModeBtn.textContent = "Online";
+            console.log("Terhubung ke Firebase.");
+          } else {
+            onlineModeBtn.disabled = true;
+            onlineModeBtn.textContent = "Menghubungkan...";
+            console.log("Koneksi ke Firebase terputus.");
+          }
+        });
+
+    });
+    </script>
+</body>
+</html>
